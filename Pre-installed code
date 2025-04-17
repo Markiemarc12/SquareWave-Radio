@@ -1,0 +1,68 @@
+#include <Wire.h>
+#include <TEA5767N.h>
+
+
+//Constants:
+TEA5767N Radio = TEA5767N(); // Using standard I2C pins A4 and A5
+
+#define MUTEPIN    2         // D2 pin
+#define STATIONPIN 3         // D3 pin
+
+//Variables:
+int flag=0;
+double stations[] = {107.9, 89.5, 90.1, 99.3, 107.1, 101.7, 104.7, 103.7, 107.5, 106.7, 88.1, 90.9, 92.9, 105.9, 96.3}; // Your station presets
+int currentstation = 0;
+int maxstation = 14; // Last item in the stations array (zero indexed)
+bool mutestate = 0;
+
+void setup () {
+  //Init
+  Serial.begin(9600);
+  Serial.println("Arduino FM radio example");
+
+  pinMode(MUTEPIN, INPUT); 
+  pinMode(STATIONPIN, INPUT); 
+  
+  Radio.selectFrequency(stations[currentstation]); //power on with the first station
+  delay(250); // Added this delay to ensure tuning stats read from the module are correct - module has time to tune properly
+
+}
+
+void loop () {
+  //Mute radio if mute pin pressed
+  if (digitalRead(MUTEPIN)==HIGH) {
+    mutestate = !mutestate;
+    if (mutestate) {
+      Serial.println("Muting radio");
+      Radio.mute();
+    } else {
+      Serial.println("Unmuting radio");
+      Radio.turnTheSoundBackOn();
+    }
+  }
+  //Change station if Stationpin pressed
+  if (digitalRead(STATIONPIN)==HIGH) {
+    Serial.println("Tuning to next station");
+    currentstation++;
+    if (currentstation>maxstation) {
+      currentstation = 0;
+    }
+    Radio.selectFrequency(stations[currentstation]); 
+    flag = 0; // Flag to fetch stats and display over serial
+    delay(250); // Added this delay to ensure tuning stats read from the module are correct - module has time to tune properly  
+  }
+  //flag created to print information about current station. Will eventually print this to LCD display
+  if (flag == 0) {
+    Serial.print("Current freq: ");
+    Serial.print(Radio.readFrequencyInMHz());
+    Serial.print("MHz Signal: ");
+    Serial.print(Radio.isStereo() ? "STEREO" : "MONO");
+    Serial.print(" ");
+    Serial.print(Radio.getSignalLevel());
+    Serial.println("/15");
+    flag=1;
+  }
+   
+  delay(100); // General delay
+   
+}
