@@ -1,36 +1,82 @@
+/*
+   This code incorporates code from the TEA5767 library published by 
+   Marcos R. Oliveira at: https://github.com/mroger/TEA5767
+
+   And code provided by Csongor Varga watch a video on this
+   example at: https://youtu.be/yp0HVGjakMs
+
+   This example is available at: https://github.com/nygma2004/tea5657_station_selector
+
+
+   Copyright 2014 Marcos R. Oliveira
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+
+   Code provided by Jack Mctasney was used to help write the necessary code for the OLED.
+*/
 #include <Wire.h>
 #include <TEA5767N.h>
 
 
 //Constants:
-TEA5767N Radio = TEA5767N(); // Using standard I2C pins A4 and A5
+TEA5767N Radio = TEA5767N();  // Using standard I2C pins A4 and A5
 
-#define MUTEPIN    2         // D2 pin
-#define STATIONPIN 3         // D3 pin
+#define MUTEPIN 2     // D2 pin
+#define STATIONPIN 3  // D3 pin
+#define BCKSTATIONPIN 5 //D4 pin
+
+//Oled code
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+#define SCREEN_WIDTH 128  // OLED display width,  in pixels
+#define SCREEN_HEIGHT 64  // OLED display height, in pixels
+// declare an SSD1306 display object connected to I2C
+Adafruit_SSD1306 oled(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+
 
 //Variables:
-int flag=0;
-double stations[] = {107.9, 89.5, 90.1, 99.3, 107.1, 101.7, 104.7, 103.7, 107.5, 106.7, 88.1, 90.9, 92.9, 105.9, 96.3}; // Your station presets
+int flag = 0;
+double stations[] = { 88.1, 89.5, 90.1, 90.9, 92.9, 96.3, 99.3, 101.7, 103.7, 104.7, 105.9, 106.7, 107.1, 107.5, 107.9};  // Your station presets
 int currentstation = 0;
-int maxstation = 14; // Last item in the stations array (zero indexed)
+int maxstation = 14;  // Last item in the stations array (zero indexed)
+int minstation = 0;
 bool mutestate = 0;
 
-void setup () {
+void setup() {
   //Init
   Serial.begin(9600);
   Serial.println("Arduino FM radio example");
 
-  pinMode(MUTEPIN, INPUT); 
-  pinMode(STATIONPIN, INPUT); 
-  
-  Radio.selectFrequency(stations[currentstation]); //power on with the first station
-  delay(250); // Added this delay to ensure tuning stats read from the module are correct - module has time to tune properly
+  pinMode(MUTEPIN, INPUT_PULLUP);
+  pinMode(STATIONPIN, INPUT_PULLUP);
+  pinMode(BCKSTATIONPIN, INPUT_PULLUP);
 
+  Radio.selectFrequency(stations[currentstation]);  //power on with the first station
+  delay(250);                                       // Added this delay to ensure tuning stats read from the module are correct - module has time to tune properly
+
+  if (!oled.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {  // Initialize OLED Display to address 0x3C
+    Serial.println(F("SSD1306 allocation failed"));
+    while (true)
+      ;
+  }
+  oled.clearDisplay();
+  oled.setTextColor(WHITE);
 }
 
-void loop () {
+void loop() {
   //Mute radio if mute pin pressed
-  if (digitalRead(MUTEPIN)==HIGH) {
+  /*if (digitalRead(MUTEPIN) == LOW) {
     mutestate = !mutestate;
     if (mutestate) {
       Serial.println("Muting radio");
@@ -40,17 +86,31 @@ void loop () {
       Radio.turnTheSoundBackOn();
     }
   }
+  */
   //Change station if Stationpin pressed
-  if (digitalRead(STATIONPIN)==HIGH) {
+  if (digitalRead(STATIONPIN) == LOW) {
     Serial.println("Tuning to next station");
     currentstation++;
-    if (currentstation>maxstation) {
+    if (currentstation > maxstation) {
       currentstation = 0;
     }
-    Radio.selectFrequency(stations[currentstation]); 
-    flag = 0; // Flag to fetch stats and display over serial
-    delay(250); // Added this delay to ensure tuning stats read from the module are correct - module has time to tune properly  
+    Radio.selectFrequency(stations[currentstation]);
+    flag = 0;    // Flag to fetch stats and display over serial
+    delay(250);  // Added this delay to ensure tuning stats read from the module are correct - module has time to tune properly
   }
+
+  //Change station back if BCKSTATION pin is pressed
+ if (digitalRead(BCKSTATIONPIN) == LOW) {
+    Serial.println("Tuning to previous station");
+    currentstation--;
+    if (currentstation < minstation) {
+      currentstation = maxstation;
+    }
+    Radio.selectFrequency(stations[currentstation]);
+    flag = 0;    // Flag to fetch stats and display over serial
+    delay(250);  // Added this delay to ensure tuning stats read from the module are correct - module has time to tune properly
+  }
+
   //flag created to print information about current station. Will eventually print this to LCD display
   if (flag == 0) {
     Serial.print("Current freq: ");
@@ -60,9 +120,28 @@ void loop () {
     Serial.print(" ");
     Serial.print(Radio.getSignalLevel());
     Serial.println("/15");
-    flag=1;
+    // ✅ OLED display update
+    oled.clearDisplay();
+
+    oled.setCursor(10, 1);
+    oled.setTextSize(1);
+    oled.setTextColor(WHITE);
+    oled.print("SQUAREWAVE FM Radio");
+
+    oled.setCursor(1, 20);
+    oled.setTextSize(1);
+    oled.print("Station");
+
+    oled.setCursor(50, 20);
+    oled.print(Radio.readFrequencyInMHz());  // One decimal point
+
+    oled.setCursor(1, 30);
+    oled.print("Volume:");
+
+    oled.display();
+    flag = 1;
   }
-   
-  delay(100); // General delay
-   
+
+  delay(100);  // General delay
 }
+
